@@ -7,39 +7,22 @@ import plotly.express as px
 # =========================================================
 
 st.set_page_config(
-    page_title="Bug Life Cycle Analytics",
+    page_title="Bug Life Cycle Management Dashboard",
     page_icon="🐞",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # =========================================================
-# CUSTOM CSS
+# HEADER
 # =========================================================
 
-st.markdown("""
-<style>
+st.title("🐞 Bug Life Cycle Management Dashboard")
+st.markdown(
+    "### Software Quality, Bug Analysis and Team Performance"
+)
 
-.main-title {
-    font-size: 36px;
-    font-weight: bold;
-    text-align: center;
-}
-
-.subtitle {
-    text-align: center;
-    font-size: 18px;
-    color: gray;
-}
-
-.metric-box {
-    padding: 15px;
-    border-radius: 10px;
-    text-align: center;
-}
-
-</style>
-""", unsafe_allow_html=True)
+st.divider()
 
 # =========================================================
 # LOAD DATA
@@ -50,10 +33,10 @@ def load_data():
 
     file_path = "Bug_Life_Cycle_Managementreport.csv"
 
-    data = pd.read_csv(file_path)
+    df = pd.read_csv(file_path)
 
-    # Remove extra spaces from column names
-    data.columns = data.columns.str.strip()
+    # Remove spaces from column names
+    df.columns = df.columns.str.strip()
 
     # Convert date columns safely
     date_columns = [
@@ -64,31 +47,27 @@ def load_data():
         "Date_Closed"
     ]
 
-    for column in date_columns:
-
-        if column in data.columns:
-
-            data[column] = pd.to_datetime(
-                data[column],
+    for col in date_columns:
+        if col in df.columns:
+            df[col] = pd.to_datetime(
+                df[col],
                 dayfirst=True,
                 errors="coerce"
             )
 
-    # Numeric columns
-    if "Resolution_Time_Hours" in data.columns:
-        data["Resolution_Time_Hours"] = pd.to_numeric(
-            data["Resolution_Time_Hours"],
+    # Convert resolution time to numeric
+    if "Resolution_Time_Hours" in df.columns:
+        df["Resolution_Time_Hours"] = pd.to_numeric(
+            df["Resolution_Time_Hours"],
             errors="coerce"
         )
 
-    if "Similarity_Score" in data.columns:
-        data["Similarity_Score"] = pd.to_numeric(
-            data["Similarity_Score"],
-            errors="coerce"
-        )
+    return df
 
-    return data
 
+# =========================================================
+# LOAD DATA WITH ERROR HANDLING
+# =========================================================
 
 try:
 
@@ -97,50 +76,31 @@ try:
 except FileNotFoundError:
 
     st.error(
-        "CSV file not found. Make sure Bug_Life_Cycle_Managementreport.csv "
-        "is in the same folder as app.py."
+        "CSV file not found. Please keep "
+        "Bug_Life_Cycle_Managementreport.csv "
+        "in the same folder as app.py."
     )
 
     st.stop()
 
 
 # =========================================================
-# HEADER
+# SIDEBAR FILTERS
 # =========================================================
 
-st.markdown(
-    '<div class="main-title">🐞 Bug Life Cycle Management Dashboard</div>',
-    unsafe_allow_html=True
-)
+st.sidebar.header("🔎 Dashboard Filters")
 
-st.markdown(
-    '<div class="subtitle">'
-    'Interactive Bug Analysis | Quality Monitoring | Team Performance'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-st.divider()
-
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-
-st.sidebar.title("🔎 Dashboard Filters")
-
-# Status filter
 status_options = sorted(
     df["Status"].dropna().unique().tolist()
 )
 
 selected_status = st.sidebar.multiselect(
-    "Bug Status",
+    "Status",
     status_options,
     default=status_options
 )
 
-# Priority filter
+
 priority_options = sorted(
     df["Priority"].dropna().unique().tolist()
 )
@@ -151,7 +111,7 @@ selected_priority = st.sidebar.multiselect(
     default=priority_options
 )
 
-# Severity filter
+
 severity_options = sorted(
     df["Severity"].dropna().unique().tolist()
 )
@@ -162,7 +122,7 @@ selected_severity = st.sidebar.multiselect(
     default=severity_options
 )
 
-# Module filter
+
 module_options = sorted(
     df["Module"].dropna().unique().tolist()
 )
@@ -173,7 +133,7 @@ selected_modules = st.sidebar.multiselect(
     default=module_options
 )
 
-# Sprint filter
+
 sprint_options = sorted(
     df["Sprint"].dropna().unique().tolist()
 )
@@ -184,7 +144,7 @@ selected_sprints = st.sidebar.multiselect(
     default=sprint_options
 )
 
-# Team filter
+
 team_options = sorted(
     df["Team"].dropna().unique().tolist()
 )
@@ -197,7 +157,7 @@ selected_teams = st.sidebar.multiselect(
 
 
 # =========================================================
-# APPLY FILTERS
+# FILTER DATA
 # =========================================================
 
 filtered_df = df[
@@ -218,52 +178,33 @@ total_bugs = len(filtered_df)
 
 open_bugs = len(
     filtered_df[
-        filtered_df["Status"].str.contains(
-            "Open",
-            case=False,
-            na=False
-        )
+        filtered_df["Status"]
+        .astype(str)
+        .str.contains("Open", case=False, na=False)
     ]
 )
 
 closed_bugs = len(
     filtered_df[
-        filtered_df["Status"].str.contains(
-            "Closed",
-            case=False,
-            na=False
-        )
-    ]
-)
-
-in_progress = len(
-    filtered_df[
-        filtered_df["Status"].str.contains(
-            "Progress",
-            case=False,
-            na=False
-        )
+        filtered_df["Status"]
+        .astype(str)
+        .str.contains("Closed", case=False, na=False)
     ]
 )
 
 critical_bugs = len(
     filtered_df[
-        filtered_df["Severity"].str.contains(
-            "Critical",
-            case=False,
-            na=False
-        )
+        filtered_df["Severity"]
+        .astype(str)
+        .str.contains("Critical", case=False, na=False)
     ]
 )
 
 if len(filtered_df) > 0:
-
     average_resolution = filtered_df[
         "Resolution_Time_Hours"
     ].mean()
-
 else:
-
     average_resolution = 0
 
 
@@ -273,29 +214,29 @@ else:
 
 st.subheader("📊 Key Performance Indicators")
 
-k1, k2, k3, k4, k5 = st.columns(5)
+col1, col2, col3, col4, col5 = st.columns(5)
 
-k1.metric(
+col1.metric(
     "🐞 Total Bugs",
     total_bugs
 )
 
-k2.metric(
+col2.metric(
     "🔓 Open Bugs",
     open_bugs
 )
 
-k3.metric(
+col3.metric(
     "✅ Closed Bugs",
     closed_bugs
 )
 
-k4.metric(
+col4.metric(
     "🚨 Critical Bugs",
     critical_bugs
 )
 
-k5.metric(
+col5.metric(
     "⏱ Avg Resolution",
     f"{average_resolution:.1f} hrs"
 )
@@ -373,6 +314,7 @@ with tab1:
             priority_data,
             x="Priority",
             y="Count",
+            color="Priority",
             text="Count",
             title="Priority-wise Bug Distribution"
         )
@@ -383,6 +325,7 @@ with tab1:
         )
 
     # SEVERITY
+
     severity_data = (
         filtered_df["Severity"]
         .value_counts()
@@ -420,6 +363,7 @@ with tab2:
     col1, col2 = st.columns(2)
 
     # MODULE
+
     with col1:
 
         module_data = (
@@ -448,6 +392,7 @@ with tab2:
         )
 
     # SPRINT
+
     with col2:
 
         sprint_data = (
@@ -565,8 +510,6 @@ with tab3:
         use_container_width=True
     )
 
-    # Team bugs
-
     fig = px.bar(
         team_data,
         x="Team",
@@ -574,36 +517,6 @@ with tab3:
         color="Average_Resolution_Hours",
         text="Total_Bugs",
         title="Team-wise Bug Count"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    # Assigned To
-
-    st.subheader("👨‍💻 Bugs by Assigned Engineer")
-
-    assigned_data = (
-        filtered_df["Assigned_To"]
-        .fillna("Unassigned")
-        .value_counts()
-        .reset_index()
-    )
-
-    assigned_data.columns = [
-        "Assigned To",
-        "Bug Count"
-    ]
-
-    fig = px.bar(
-        assigned_data,
-        x="Assigned To",
-        y="Bug Count",
-        color="Bug Count",
-        text="Bug Count",
-        title="Engineer-wise Bug Distribution"
     )
 
     st.plotly_chart(
@@ -620,69 +533,75 @@ with tab4:
 
     st.subheader("📈 Bug Trends")
 
-    # Reported bugs over time
+    # Reported bugs
 
-    reported = (
-        filtered_df
-        .dropna(subset=["Date_Reported"])
-        .groupby(
-            filtered_df.dropna(
-                subset=["Date_Reported"]
-            )["Date_Reported"].dt.date
+    reported_df = filtered_df.dropna(
+        subset=["Date_Reported"]
+    ).copy()
+
+    if not reported_df.empty:
+
+        reported = (
+            reported_df
+            .groupby(
+                reported_df["Date_Reported"].dt.date
+            )
+            .size()
+            .reset_index(name="Bug Count")
         )
-        .size()
-        .reset_index(name="Bug Count")
-    )
 
-    reported.columns = [
-        "Date",
-        "Bug Count"
-    ]
+        reported.columns = [
+            "Date",
+            "Bug Count"
+        ]
 
-    fig = px.line(
-        reported,
-        x="Date",
-        y="Bug Count",
-        markers=True,
-        title="Bugs Reported Over Time"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    # Closed bugs trend
-
-    closed = (
-        filtered_df
-        .dropna(subset=["Date_Closed"])
-        .groupby(
-            filtered_df.dropna(
-                subset=["Date_Closed"]
-            )["Date_Closed"].dt.date
+        fig = px.line(
+            reported,
+            x="Date",
+            y="Bug Count",
+            markers=True,
+            title="Bugs Reported Over Time"
         )
-        .size()
-        .reset_index(name="Closed Bugs")
-    )
 
-    closed.columns = [
-        "Date",
-        "Closed Bugs"
-    ]
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
-    fig = px.line(
-        closed,
-        x="Date",
-        y="Closed Bugs",
-        markers=True,
-        title="Bugs Closed Over Time"
-    )
+    # Closed bugs
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    closed_df = filtered_df.dropna(
+        subset=["Date_Closed"]
+    ).copy()
+
+    if not closed_df.empty:
+
+        closed = (
+            closed_df
+            .groupby(
+                closed_df["Date_Closed"].dt.date
+            )
+            .size()
+            .reset_index(name="Closed Bugs")
+        )
+
+        closed.columns = [
+            "Date",
+            "Closed Bugs"
+        ]
+
+        fig = px.line(
+            closed,
+            x="Date",
+            y="Closed Bugs",
+            markers=True,
+            title="Bugs Closed Over Time"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
     # Resolution time
 
@@ -751,9 +670,9 @@ with tab5:
     ]
 
     columns_to_show = [
-        column
-        for column in columns_to_show
-        if column in display_df.columns
+        col
+        for col in columns_to_show
+        if col in display_df.columns
     ]
 
     st.dataframe(
@@ -761,8 +680,6 @@ with tab5:
         use_container_width=True,
         height=500
     )
-
-    # Download
 
     download_data = display_df.to_csv(
         index=False
@@ -784,5 +701,5 @@ st.divider()
 
 st.caption(
     "Bug Life Cycle Management Dashboard | "
-    "Developed using Python, Pandas, Streamlit and Plotly"
+    "Python | Pandas | Plotly | Streamlit"
 )
