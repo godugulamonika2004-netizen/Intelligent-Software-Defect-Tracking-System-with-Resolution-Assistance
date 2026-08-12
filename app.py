@@ -7,7 +7,7 @@ import plotly.express as px
 # =========================================================
 
 st.set_page_config(
-    page_title="Bug Life Cycle Management Dashboard",
+    page_title="Intelligent Software Defect Tracking System with Resolution Assistance",
     page_icon="🐞",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -17,7 +17,7 @@ st.set_page_config(
 # HEADER
 # =========================================================
 
-st.title("🐞 Bug Life Cycle Management Dashboard")
+st.title("🐞 Intelligent Software Defect Tracking System with Resolution Assistance")
 st.markdown(
     "### Software Quality, Bug Analysis and Team Performance"
 )
@@ -31,7 +31,7 @@ st.divider()
 @st.cache_data
 def load_data():
 
-    file_path = "Bug_Life_Cycle_Managementreport.csv"
+    file_path = "Intelligent Software Defect Tracking System with Resolution Assistance.csv"
 
     df = pd.read_csv(file_path)
 
