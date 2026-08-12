@@ -17,7 +17,7 @@ st.set_page_config(
 # HEADER
 # =========================================================
 
-st.title("🐞 Intelligent Software Defect Tracking System with Resolution Assistance")
+st.title("🐞 Intelligent Software Defect Tracking System with Resolution Assistance Dashboard")
 st.markdown(
     "### Software Quality, Bug Analysis and Team Performance"
 )
@@ -700,6 +700,6 @@ with tab5:
 st.divider()
 
 st.caption(
-    "Bug Life Cycle Management Dashboard | "
+    "Intelligent Software Defect Tracking System with Resolution Assistance Dashboard | "
     "Python | Pandas | Plotly | Streamlit"
 )
