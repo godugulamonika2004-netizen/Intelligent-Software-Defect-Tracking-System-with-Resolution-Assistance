@@ -1,4 +1,4 @@
-# 🐞 Bug Life Cycle Management Dashboard
+# 🐞 Intelligent Software Defect Tracking System with Resolution Assistance
 
 ## Project Overview
 
