@@ -22,7 +22,6 @@ An interactive Streamlit dashboard developed using Python, Pandas, and Plotly to
 
 ## Technologies Used
 
-- Python
 - Streamlit
 - Pandas
 - Plotly
