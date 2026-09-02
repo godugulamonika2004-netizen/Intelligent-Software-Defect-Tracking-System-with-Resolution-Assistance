@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from google import genai
 
+api_key = st.secrets["GEMINI_API_KEY"]
+client = genai.Client(api_key=api_key)
 # =========================================================
 # PAGE CONFIGURATION
 # =========================================================
@@ -13,16 +16,30 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
 # =========================================================
-# HEADER
+# CUSTOM CSS
 # =========================================================
 
-st.title("🐞 Intelligent Software Defect Tracking System with Resolution Assistance Dashboard")
-st.markdown(
-    "### Software Quality, Bug Analysis and Team Performance"
-)
+st.markdown("""
+<style>
 
-st.divider()
+.main-title {
+    font-size: 36px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.subtitle {
+    text-align: center;
+    font-size: 18px;
+    color: gray;
+    margin-bottom: 20px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 
 # =========================================================
 # LOAD DATA
@@ -33,10 +50,10 @@ def load_data():
 
     file_path = "Intelligent Software Defect Tracking System with Resolution Assistance.csv"
 
-    df = pd.read_csv(file_path)
+    data = pd.read_csv(file_path)
 
-    # Remove spaces from column names
-    df.columns = df.columns.str.strip()
+    # Remove extra spaces from column names
+    data.columns = data.columns.str.strip()
 
     # Convert date columns safely
     date_columns = [
@@ -47,62 +64,156 @@ def load_data():
         "Date_Closed"
     ]
 
-    for col in date_columns:
-        if col in df.columns:
-            df[col] = pd.to_datetime(
-                df[col],
+    for column in date_columns:
+        if column in data.columns:
+            data[column] = pd.to_datetime(
+                data[column],
                 dayfirst=True,
                 errors="coerce"
             )
 
-    # Convert resolution time to numeric
-    if "Resolution_Time_Hours" in df.columns:
-        df["Resolution_Time_Hours"] = pd.to_numeric(
-            df["Resolution_Time_Hours"],
-            errors="coerce"
-        )
+    # Convert numeric columns safely
+    numeric_columns = [
+        "Resolution_Time_Hours",
+        "Similarity_Score"
+    ]
 
-    return df
+    for column in numeric_columns:
+        if column in data.columns:
+            data[column] = pd.to_numeric(
+                data[column],
+                errors="coerce"
+            )
+
+    return data
 
 
 # =========================================================
-# LOAD DATA WITH ERROR HANDLING
+# LOAD CSV
 # =========================================================
 
 try:
-
     df = load_data()
 
 except FileNotFoundError:
 
     st.error(
-        "CSV file not found. Please keep "
-        "Bug_Life_Cycle_Managementreport.csv "
-        "in the same folder as app.py."
+        "CSV file not found. Make sure "
+        "'Intelligent Software Defect Tracking System with Resolution Assistance.csv' "
+        "is in the same folder as app.py."
     )
 
     st.stop()
 
 
 # =========================================================
+# HELPER FUNCTIONS
+# =========================================================
+
+def get_options(data, column):
+
+    if column in data.columns:
+        return sorted(
+            data[column]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+    return []
+
+
+def safe_value_counts(data, column):
+
+    if column not in data.columns:
+        return pd.DataFrame(
+            columns=[column, "Count"]
+        )
+
+    result = (
+        data[column]
+        .fillna("Unknown")
+        .value_counts()
+        .reset_index()
+    )
+
+    result.columns = [
+        column,
+        "Count"
+    ]
+
+    return result
+
+
+def get_top_item(data, column):
+
+    if column not in data.columns:
+        return None
+
+    counts = (
+        data[column]
+        .fillna("Unknown")
+        .value_counts()
+    )
+
+    if counts.empty:
+        return None
+
+    return counts.index[0], counts.iloc[0]
+
+
+# =========================================================
+# HEADER
+# =========================================================
+
+st.markdown(
+    """
+    <div class="main-title">
+    🐞 Intelligent Software Defect Tracking System
+    with Resolution Assistance
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+    <div class="subtitle">
+    Interactive Bug Analysis | Quality Monitoring | Team Performance | AI Assistance
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.divider()
+
+
+# =========================================================
 # SIDEBAR FILTERS
 # =========================================================
 
-st.sidebar.header("🔎 Dashboard Filters")
+st.sidebar.title("🔎 Dashboard Filters")
 
-status_options = sorted(
-    df["Status"].dropna().unique().tolist()
-)
+if st.sidebar.button(
+    "🔄 Reset Filters",
+    use_container_width=True
+):
+    st.rerun()
+
+
+status_options = get_options(df, "Status")
+priority_options = get_options(df, "Priority")
+severity_options = get_options(df, "Severity")
+module_options = get_options(df, "Module")
+sprint_options = get_options(df, "Sprint")
+team_options = get_options(df, "Team")
+
 
 selected_status = st.sidebar.multiselect(
-    "Status",
+    "Bug Status",
     status_options,
     default=status_options
-)
-
-
-priority_options = sorted(
-    df["Priority"].dropna().unique().tolist()
 )
 
 selected_priority = st.sidebar.multiselect(
@@ -111,20 +222,10 @@ selected_priority = st.sidebar.multiselect(
     default=priority_options
 )
 
-
-severity_options = sorted(
-    df["Severity"].dropna().unique().tolist()
-)
-
 selected_severity = st.sidebar.multiselect(
     "Severity",
     severity_options,
     default=severity_options
-)
-
-
-module_options = sorted(
-    df["Module"].dropna().unique().tolist()
 )
 
 selected_modules = st.sidebar.multiselect(
@@ -133,20 +234,10 @@ selected_modules = st.sidebar.multiselect(
     default=module_options
 )
 
-
-sprint_options = sorted(
-    df["Sprint"].dropna().unique().tolist()
-)
-
 selected_sprints = st.sidebar.multiselect(
     "Sprint",
     sprint_options,
     default=sprint_options
-)
-
-
-team_options = sorted(
-    df["Team"].dropna().unique().tolist()
 )
 
 selected_teams = st.sidebar.multiselect(
@@ -157,17 +248,46 @@ selected_teams = st.sidebar.multiselect(
 
 
 # =========================================================
-# FILTER DATA
+# APPLY FILTERS
 # =========================================================
 
-filtered_df = df[
-    df["Status"].isin(selected_status)
-    & df["Priority"].isin(selected_priority)
-    & df["Severity"].isin(selected_severity)
-    & df["Module"].isin(selected_modules)
-    & df["Sprint"].isin(selected_sprints)
-    & df["Team"].isin(selected_teams)
-].copy()
+filtered_df = df.copy()
+
+
+if "Status" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Status"].isin(selected_status)
+    ]
+
+
+if "Priority" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Priority"].isin(selected_priority)
+    ]
+
+
+if "Severity" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Severity"].isin(selected_severity)
+    ]
+
+
+if "Module" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Module"].isin(selected_modules)
+    ]
+
+
+if "Sprint" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Sprint"].isin(selected_sprints)
+    ]
+
+
+if "Team" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Team"].isin(selected_teams)
+    ]
 
 
 # =========================================================
@@ -176,85 +296,90 @@ filtered_df = df[
 
 total_bugs = len(filtered_df)
 
-open_bugs = len(
-    filtered_df[
-        filtered_df["Status"]
-        .astype(str)
-        .str.contains("Open", case=False, na=False)
-    ]
-)
 
-closed_bugs = len(
-    filtered_df[
-        filtered_df["Status"]
-        .astype(str)
-        .str.contains("Closed", case=False, na=False)
-    ]
-)
+open_bugs = 0
 
-critical_bugs = len(
-    filtered_df[
-        filtered_df["Severity"]
-        .astype(str)
-        .str.contains("Critical", case=False, na=False)
-    ]
-)
+if "Status" in filtered_df.columns:
+    open_bugs = len(
+        filtered_df[
+            filtered_df["Status"]
+            .astype(str)
+            .str.contains(
+                "open",
+                case=False,
+                na=False
+            )
+        ]
+    )
 
-if len(filtered_df) > 0:
-    average_resolution = filtered_df[
-        "Resolution_Time_Hours"
-    ].mean()
-else:
-    average_resolution = 0
+
+closed_bugs = 0
+
+if "Status" in filtered_df.columns:
+    closed_bugs = len(
+        filtered_df[
+            filtered_df["Status"]
+            .astype(str)
+            .str.contains(
+                "closed",
+                case=False,
+                na=False
+            )
+        ]
+    )
+
+
+critical_bugs = 0
+
+if "Severity" in filtered_df.columns:
+    critical_bugs = len(
+        filtered_df[
+            filtered_df["Severity"]
+            .astype(str)
+            .str.contains(
+                "critical",
+                case=False,
+                na=False
+            )
+        ]
+    )
+
+
+average_resolution = 0
+
+if (
+    not filtered_df.empty
+    and "Resolution_Time_Hours" in filtered_df.columns
+):
+    average_resolution = (
+        filtered_df["Resolution_Time_Hours"].mean()
+    )
+
+    if pd.isna(average_resolution):
+        average_resolution = 0
+
+
+closure_rate = 0
+
+if total_bugs > 0:
+    closure_rate = (
+        closed_bugs / total_bugs
+    ) * 100
 
 
 # =========================================================
-# KPI CARDS
+# DASHBOARD TABS
 # =========================================================
 
-st.subheader("📊 Key Performance Indicators")
-
-col1, col2, col3, col4, col5 = st.columns(5)
-
-col1.metric(
-    "🐞 Total Bugs",
-    total_bugs
-)
-
-col2.metric(
-    "🔓 Open Bugs",
-    open_bugs
-)
-
-col3.metric(
-    "✅ Closed Bugs",
-    closed_bugs
-)
-
-col4.metric(
-    "🚨 Critical Bugs",
-    critical_bugs
-)
-
-col5.metric(
-    "⏱ Avg Resolution",
-    f"{average_resolution:.1f} hrs"
-)
-
-st.divider()
-
-
-# =========================================================
-# TABS
-# =========================================================
-
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
     [
         "📊 Overview",
         "🔍 Bug Analysis",
         "👥 Team Performance",
         "📈 Trends",
-        "📋 Bug Records"
+        "📋 Bug Records",
+        "🤖 AI Resolution Assistant",
+        "💬 AI Assistant"
     ]
 )
 
@@ -265,91 +390,119 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 
 with tab1:
 
-    st.subheader("Bug Overview")
+    st.header("📊 Dashboard Overview")
 
-    col1, col2 = st.columns(2)
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
 
-    # STATUS
-    with col1:
+    k1.metric("🐞 Total Bugs", total_bugs)
+    k2.metric("🔓 Open Bugs", open_bugs)
+    k3.metric("✅ Closed Bugs", closed_bugs)
+    k4.metric("🚨 Critical Bugs", critical_bugs)
+    k5.metric("⏱ Avg Resolution", f"{average_resolution:.1f} hrs")
+    k6.metric("📈 Closure Rate", f"{closure_rate:.1f}%")
 
-        status_data = (
-            filtered_df["Status"]
-            .value_counts()
-            .reset_index()
+    st.divider()
+
+    if filtered_df.empty:
+
+        st.warning(
+            "No records are available for the selected filters."
         )
 
-        status_data.columns = [
-            "Status",
-            "Count"
-        ]
+    else:
 
-        fig = px.pie(
-            status_data,
-            names="Status",
-            values="Count",
-            hole=0.45,
-            title="Bug Status Distribution"
-        )
+        col1, col2 = st.columns(2)
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        with col1:
 
-    # PRIORITY
-    with col2:
+            if "Status" in filtered_df.columns:
 
-        priority_data = (
-            filtered_df["Priority"]
-            .value_counts()
-            .reset_index()
-        )
+                status_data = safe_value_counts(
+                    filtered_df,
+                    "Status"
+                )
 
-        priority_data.columns = [
-            "Priority",
-            "Count"
-        ]
+                fig = px.pie(
+                    status_data,
+                    names="Status",
+                    values="Count",
+                    hole=0.45,
+                    title="Bug Status Distribution"
+                )
 
-        fig = px.bar(
-            priority_data,
-            x="Priority",
-            y="Count",
-            color="Priority",
-            text="Count",
-            title="Priority-wise Bug Distribution"
-        )
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        with col2:
 
-    # SEVERITY
+            if "Priority" in filtered_df.columns:
 
-    severity_data = (
-        filtered_df["Severity"]
-        .value_counts()
-        .reset_index()
-    )
+                priority_data = safe_value_counts(
+                    filtered_df,
+                    "Priority"
+                )
 
-    severity_data.columns = [
-        "Severity",
-        "Count"
-    ]
+                fig = px.bar(
+                    priority_data,
+                    x="Priority",
+                    y="Count",
+                    text="Count",
+                    title="Priority-wise Bug Distribution"
+                )
 
-    fig = px.bar(
-        severity_data,
-        x="Severity",
-        y="Count",
-        color="Severity",
-        text="Count",
-        title="Severity-wise Bug Distribution"
-    )
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+        if "Severity" in filtered_df.columns:
+
+            severity_data = safe_value_counts(
+                filtered_df,
+                "Severity"
+            )
+
+            fig = px.bar(
+                severity_data,
+                x="Severity",
+                y="Count",
+                text="Count",
+                title="Severity-wise Bug Distribution"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        if "Module" in filtered_df.columns:
+
+            module_data = (
+                filtered_df["Module"]
+                .value_counts()
+                .head(5)
+                .reset_index()
+            )
+
+            module_data.columns = [
+                "Module",
+                "Bug Count"
+            ]
+
+            fig = px.bar(
+                module_data,
+                x="Module",
+                y="Bug Count",
+                text="Bug Count",
+                title="Top 5 Modules with Most Bugs"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
 
 
 # =========================================================
@@ -358,125 +511,104 @@ with tab1:
 
 with tab2:
 
-    st.subheader("🔍 Detailed Bug Analysis")
+    st.header("🔍 Detailed Bug Analysis")
 
-    col1, col2 = st.columns(2)
+    if not filtered_df.empty:
 
-    # MODULE
+        col1, col2 = st.columns(2)
 
-    with col1:
+        with col1:
 
-        module_data = (
-            filtered_df["Module"]
-            .value_counts()
-            .reset_index()
-        )
+            if "Module" in filtered_df.columns:
 
-        module_data.columns = [
-            "Module",
-            "Count"
-        ]
+                module_data = safe_value_counts(
+                    filtered_df,
+                    "Module"
+                )
 
-        fig = px.bar(
-            module_data,
-            x="Module",
-            y="Count",
-            color="Count",
-            text="Count",
-            title="Module-wise Bug Distribution"
-        )
+                fig = px.bar(
+                    module_data,
+                    x="Module",
+                    y="Count",
+                    text="Count",
+                    title="Module-wise Bug Distribution"
+                )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
 
-    # SPRINT
+        with col2:
 
-    with col2:
+            if "Sprint" in filtered_df.columns:
 
-        sprint_data = (
-            filtered_df["Sprint"]
-            .value_counts()
-            .reset_index()
-        )
+                sprint_data = safe_value_counts(
+                    filtered_df,
+                    "Sprint"
+                )
 
-        sprint_data.columns = [
-            "Sprint",
-            "Count"
-        ]
+                fig = px.bar(
+                    sprint_data,
+                    x="Sprint",
+                    y="Count",
+                    text="Count",
+                    title="Sprint-wise Bug Distribution"
+                )
 
-        fig = px.bar(
-            sprint_data,
-            x="Sprint",
-            y="Count",
-            color="Count",
-            text="Count",
-            title="Sprint-wise Bug Distribution"
-        )
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        if "Root_Cause" in filtered_df.columns:
 
-    # ROOT CAUSE
+            root_data = (
+                filtered_df["Root_Cause"]
+                .fillna("Unknown")
+                .value_counts()
+                .head(10)
+                .reset_index()
+            )
 
-    st.subheader("🌳 Root Cause Analysis")
+            root_data.columns = [
+                "Root Cause",
+                "Count"
+            ]
 
-    root_data = (
-        filtered_df["Root_Cause"]
-        .fillna("Unknown")
-        .value_counts()
-        .reset_index()
-    )
+            fig = px.bar(
+                root_data,
+                x="Count",
+                y="Root Cause",
+                orientation="h",
+                text="Count",
+                title="Top Root Causes"
+            )
 
-    root_data.columns = [
-        "Root Cause",
-        "Count"
-    ]
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
 
-    fig = px.bar(
-        root_data,
-        x="Count",
-        y="Root Cause",
-        orientation="h",
-        text="Count",
-        title="Bugs by Root Cause"
-    )
+        if "Resolution" in filtered_df.columns:
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+            resolution_data = safe_value_counts(
+                filtered_df,
+                "Resolution"
+            )
 
-    # RESOLUTION
+            fig = px.pie(
+                resolution_data,
+                names="Resolution",
+                values="Count",
+                hole=0.35,
+                title="Resolution Distribution"
+            )
 
-    st.subheader("🔧 Resolution Analysis")
-
-    resolution_data = (
-        filtered_df["Resolution"]
-        .fillna("Not Resolved")
-        .value_counts()
-        .reset_index()
-    )
-
-    resolution_data.columns = [
-        "Resolution",
-        "Count"
-    ]
-
-    fig = px.pie(
-        resolution_data,
-        names="Resolution",
-        values="Count",
-        title="Resolution Distribution"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
 
 
 # =========================================================
@@ -485,44 +617,91 @@ with tab2:
 
 with tab3:
 
-    st.subheader("👥 Team Performance")
+    st.header("👥 Team Performance")
 
-    team_data = (
-        filtered_df
-        .groupby("Team")
-        .agg(
-            Total_Bugs=("Bug_ID", "count"),
-            Average_Resolution_Hours=(
-                "Resolution_Time_Hours",
-                "mean"
+    if not filtered_df.empty:
+
+        if (
+            "Team" in filtered_df.columns
+            and "Bug_ID" in filtered_df.columns
+        ):
+
+            aggregation = {
+                "Total_Bugs": (
+                    "Bug_ID",
+                    "count"
+                )
+            }
+
+            if "Resolution_Time_Hours" in filtered_df.columns:
+
+                aggregation[
+                    "Average_Resolution_Time_Hours"
+                ] = (
+                    "Resolution_Time_Hours",
+                    "mean"
+                )
+
+            team_data = (
+                filtered_df
+                .groupby("Team")
+                .agg(**aggregation)
+                .reset_index()
             )
-        )
-        .reset_index()
-    )
 
-    team_data["Average_Resolution_Hours"] = (
-        team_data["Average_Resolution_Hours"]
-        .round(2)
-    )
+            if (
+                "Average_Resolution_Time_Hours"
+                in team_data.columns
+            ):
 
-    st.dataframe(
-        team_data,
-        use_container_width=True
-    )
+                team_data[
+                    "Average_Resolution_Time_Hours"
+                ] = (
+                    team_data[
+                        "Average_Resolution_Time_Hours"
+                    ].round(2)
+                )
 
-    fig = px.bar(
-        team_data,
-        x="Team",
-        y="Total_Bugs",
-        color="Average_Resolution_Hours",
-        text="Total_Bugs",
-        title="Team-wise Bug Count"
-    )
+            fig = px.bar(
+                team_data,
+                x="Team",
+                y="Total_Bugs",
+                text="Total_Bugs",
+                title="Team-wise Bug Count"
+            )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        if "Assigned_To" in filtered_df.columns:
+
+            assigned_data = (
+                filtered_df["Assigned_To"]
+                .fillna("Unassigned")
+                .value_counts()
+                .head(10)
+                .reset_index()
+            )
+
+            assigned_data.columns = [
+                "Assigned To",
+                "Bug Count"
+            ]
+
+            fig = px.bar(
+                assigned_data,
+                x="Assigned To",
+                y="Bug Count",
+                text="Bug Count",
+                title="Top Developers by Assigned Bugs"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
 
 
 # =========================================================
@@ -531,93 +710,111 @@ with tab3:
 
 with tab4:
 
-    st.subheader("📈 Bug Trends")
+    st.header("📈 Bug Trends")
 
-    # Reported bugs
+    if not filtered_df.empty:
 
-    reported_df = filtered_df.dropna(
-        subset=["Date_Reported"]
-    ).copy()
+        trend_col1, trend_col2 = st.columns(2)
 
-    if not reported_df.empty:
+        with trend_col1:
 
-        reported = (
-            reported_df
-            .groupby(
-                reported_df["Date_Reported"].dt.date
+            if "Date_Reported" in filtered_df.columns:
+
+                reported_df = (
+                    filtered_df
+                    .dropna(subset=["Date_Reported"])
+                    .copy()
+                )
+
+                if not reported_df.empty:
+
+                    reported = (
+                        reported_df
+                        .groupby(
+                            reported_df[
+                                "Date_Reported"
+                            ].dt.date
+                        )
+                        .size()
+                        .reset_index(
+                            name="Reported_Bugs"
+                        )
+                    )
+
+                    reported.columns = [
+                        "Date",
+                        "Reported_Bugs"
+                    ]
+
+                    fig = px.line(
+                        reported,
+                        x="Date",
+                        y="Reported_Bugs",
+                        markers=True,
+                        title="Bugs Reported Over Time"
+                    )
+
+                    st.plotly_chart(
+                        fig,
+                        use_container_width=True
+                    )
+
+        with trend_col2:
+
+            if "Date_Closed" in filtered_df.columns:
+
+                closed_df = (
+                    filtered_df
+                    .dropna(subset=["Date_Closed"])
+                    .copy()
+                )
+
+                if not closed_df.empty:
+
+                    closed = (
+                        closed_df
+                        .groupby(
+                            closed_df[
+                                "Date_Closed"
+                            ].dt.date
+                        )
+                        .size()
+                        .reset_index(
+                            name="Closed_Bugs"
+                        )
+                    )
+
+                    closed.columns = [
+                        "Date",
+                        "Closed_Bugs"
+                    ]
+
+                    fig = px.line(
+                        closed,
+                        x="Date",
+                        y="Closed_Bugs",
+                        markers=True,
+                        title="Bugs Closed Over Time"
+                    )
+
+                    st.plotly_chart(
+                        fig,
+                        use_container_width=True
+                    )
+
+        if "Resolution_Time_Hours" in filtered_df.columns:
+
+            fig = px.histogram(
+                filtered_df,
+                x="Resolution_Time_Hours",
+                nbins=20,
+                title="Resolution Time Distribution"
             )
-            .size()
-            .reset_index(name="Bug Count")
-        )
 
-        reported.columns = [
-            "Date",
-            "Bug Count"
-        ]
-
-        fig = px.line(
-            reported,
-            x="Date",
-            y="Bug Count",
-            markers=True,
-            title="Bugs Reported Over Time"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # Closed bugs
-
-    closed_df = filtered_df.dropna(
-        subset=["Date_Closed"]
-    ).copy()
-
-    if not closed_df.empty:
-
-        closed = (
-            closed_df
-            .groupby(
-                closed_df["Date_Closed"].dt.date
+            st.plotly_chart(
+                fig,
+                use_container_width=True
             )
-            .size()
-            .reset_index(name="Closed Bugs")
-        )
-
-        closed.columns = [
-            "Date",
-            "Closed Bugs"
-        ]
-
-        fig = px.line(
-            closed,
-            x="Date",
-            y="Closed Bugs",
-            markers=True,
-            title="Bugs Closed Over Time"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # Resolution time
-
-    st.subheader("⏱ Resolution Time Distribution")
-
-    fig = px.histogram(
-        filtered_df,
-        x="Resolution_Time_Hours",
-        nbins=20,
-        title="Resolution Time in Hours"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
 
 
 # =========================================================
@@ -626,7 +823,7 @@ with tab4:
 
 with tab5:
 
-    st.subheader("📋 Bug Records")
+    st.header("📋 Bug Records")
 
     search = st.text_input(
         "🔎 Search by Bug ID or Bug Title"
@@ -636,22 +833,48 @@ with tab5:
 
     if search:
 
-        search = search.lower()
+        search_lower = search.lower()
+
+        conditions = pd.Series(
+            False,
+            index=display_df.index
+        )
+
+        if "Bug_ID" in display_df.columns:
+
+            conditions = (
+                conditions
+                |
+                display_df["Bug_ID"]
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    search_lower,
+                    na=False
+                )
+            )
+
+        if "Bug_Title" in display_df.columns:
+
+            conditions = (
+                conditions
+                |
+                display_df["Bug_Title"]
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    search_lower,
+                    na=False
+                )
+            )
 
         display_df = display_df[
-            display_df["Bug_ID"]
-            .astype(str)
-            .str.lower()
-            .str.contains(search, na=False)
-            |
-            display_df["Bug_Title"]
-            .astype(str)
-            .str.lower()
-            .str.contains(search, na=False)
+            conditions
         ]
 
     columns_to_show = [
         "Bug_ID",
+        "Bug_Title",
         "Sprint",
         "Release_Version",
         "Module",
@@ -670,27 +893,833 @@ with tab5:
     ]
 
     columns_to_show = [
-        col
-        for col in columns_to_show
-        if col in display_df.columns
+        column
+        for column in columns_to_show
+        if column in display_df.columns
     ]
 
     st.dataframe(
-        display_df[columns_to_show],
+        display_df[
+            columns_to_show
+        ],
         use_container_width=True,
         height=500
     )
 
-    download_data = display_df.to_csv(
-        index=False
-    ).encode("utf-8")
+    download_data = (
+        display_df
+        .to_csv(
+            index=False
+        )
+        .encode(
+            "utf-8"
+        )
+    )
 
     st.download_button(
         label="📥 Download Filtered Bug Report",
         data=download_data,
         file_name="Filtered_Bug_Report.csv",
-        mime="text/csv"
+        mime="text/csv",
+        use_container_width=True
     )
+
+
+# =========================================================
+# TAB 6 - AI RESOLUTION ASSISTANT
+# =========================================================
+
+with tab6:
+
+    st.header("🤖 AI Resolution Assistant")
+
+    st.write(
+        "Enter defect information to receive a possible root cause, "
+        "recommended solution, testing recommendation, and priority action."
+    )
+
+
+    def generate_resolution(
+        title,
+        description,
+        module,
+        severity,
+        priority,
+        root_cause
+    ):
+
+        combined_text = (
+            str(title).lower()
+            + " "
+            + str(description).lower()
+            + " "
+            + str(module).lower()
+            + " "
+            + str(root_cause).lower()
+        )
+
+        defect_type = "General Software Defect"
+
+        possible_cause = (
+            "The exact root cause requires further investigation."
+        )
+
+        recommended_solution = (
+            "Reproduce the defect, review relevant logs, identify the "
+            "failing component, apply a tested fix, and validate the "
+            "solution before deployment."
+        )
+
+        testing = (
+            "Perform functional testing and regression testing "
+            "after applying the fix."
+        )
+
+        action = (
+            "Assign the defect to the responsible development team "
+            "and investigate the issue."
+        )
+
+
+        # LOGIN / AUTHENTICATION
+        if any(
+            word in combined_text
+            for word in [
+                "login",
+                "authentication",
+                "password",
+                "sign in",
+                "credential",
+                "session"
+            ]
+        ):
+
+            defect_type = "Authentication Defect"
+
+            possible_cause = (
+                "The issue may be related to authentication logic, "
+                "credential validation, session management, token handling, "
+                "or database validation."
+            )
+
+            recommended_solution = (
+                "Check authentication logic, validate credential handling, "
+                "inspect session and token management, and verify database "
+                "connectivity."
+            )
+
+            testing = (
+                "Test valid login, invalid login, password reset, "
+                "session timeout, and unauthorized access."
+            )
+
+            action = (
+                "Review authentication logs and reproduce the failure."
+            )
+
+
+        # DATABASE
+        elif any(
+            word in combined_text
+            for word in [
+                "database",
+                "sql",
+                "query",
+                "mysql",
+                "postgres",
+                "mongodb"
+            ]
+        ):
+
+            defect_type = "Database Defect"
+
+            possible_cause = (
+                "The issue may be caused by an incorrect database query, "
+                "connection failure, missing data, or transaction handling."
+            )
+
+            recommended_solution = (
+                "Verify database connectivity, inspect queries, check "
+                "database records, validate transactions, and review "
+                "database constraints."
+            )
+
+            testing = (
+                "Perform database integration testing and verify CRUD operations."
+            )
+
+            action = (
+                "Check application and database logs."
+            )
+
+
+        # UI / FRONTEND
+        elif any(
+            word in combined_text
+            for word in [
+                "button",
+                "ui",
+                "interface",
+                "screen",
+                "frontend",
+                "form",
+                "layout",
+                "display"
+            ]
+        ):
+
+            defect_type = "User Interface Defect"
+
+            possible_cause = (
+                "The defect may be related to UI event handling, "
+                "frontend validation, component configuration, "
+                "CSS issues, or JavaScript errors."
+            )
+
+            recommended_solution = (
+                "Inspect the affected component, validate event handlers, "
+                "check frontend validation, and inspect browser console errors."
+            )
+
+            testing = (
+                "Test the affected screen across different browsers "
+                "and user interaction scenarios."
+            )
+
+            action = (
+                "Reproduce the UI issue and inspect the browser console."
+            )
+
+
+        # PERFORMANCE
+        elif any(
+            word in combined_text
+            for word in [
+                "slow",
+                "performance",
+                "timeout",
+                "delay",
+                "lag",
+                "response time",
+                "loading"
+            ]
+        ):
+
+            defect_type = "Performance Defect"
+
+            possible_cause = (
+                "The issue may be caused by inefficient processing, "
+                "slow database queries, high server load, memory usage, "
+                "or network latency."
+            )
+
+            recommended_solution = (
+                "Profile the application, optimize slow queries, reduce "
+                "unnecessary processing, and monitor server resources."
+            )
+
+            testing = (
+                "Perform load testing, stress testing, and response-time testing."
+            )
+
+            action = (
+                "Measure response time and identify the slowest component."
+            )
+
+
+        # API
+        elif any(
+            word in combined_text
+            for word in [
+                "api",
+                "endpoint",
+                "request",
+                "response",
+                "rest",
+                "http",
+                "json"
+            ]
+        ):
+
+            defect_type = "API Defect"
+
+            possible_cause = (
+                "The issue may be related to incorrect endpoints, "
+                "request validation, authentication, or response handling."
+            )
+
+            recommended_solution = (
+                "Verify API endpoints, request parameters, headers, "
+                "authentication, and error handling."
+            )
+
+            testing = (
+                "Test successful requests, invalid requests, authentication "
+                "failures, and error responses."
+            )
+
+            action = (
+                "Inspect API logs and reproduce the request."
+            )
+
+
+        # SECURITY
+        elif any(
+            word in combined_text
+            for word in [
+                "security",
+                "permission",
+                "access",
+                "authorization",
+                "unauthorized",
+                "role"
+            ]
+        ):
+
+            defect_type = "Security / Access Control Defect"
+
+            possible_cause = (
+                "The issue may be caused by incorrect access-control "
+                "configuration or authorization logic."
+            )
+
+            recommended_solution = (
+                "Review authentication, authorization rules, role-based "
+                "access control, and permission configuration."
+            )
+
+            testing = (
+                "Test authorized and unauthorized users across different roles."
+            )
+
+            action = (
+                "Review security logs and verify user permissions."
+            )
+
+
+        # VALIDATION
+        elif any(
+            word in combined_text
+            for word in [
+                "validation",
+                "invalid input",
+                "required field"
+            ]
+        ):
+
+            defect_type = "Input Validation Defect"
+
+            possible_cause = (
+                "The defect may be caused by missing validation "
+                "or incorrect validation rules."
+            )
+
+            recommended_solution = (
+                "Review validation rules and implement proper client-side "
+                "and server-side validation."
+            )
+
+            testing = (
+                "Perform boundary-value testing and invalid input testing."
+            )
+
+            action = (
+                "Reproduce the issue using valid and invalid inputs."
+            )
+
+
+        # SEVERITY BASED ACTION
+        if severity == "Critical":
+
+            action += (
+                " This defect is Critical and requires immediate investigation."
+            )
+
+        elif severity == "High":
+
+            action += (
+                " This defect should be prioritized before lower-severity bugs."
+            )
+
+        elif severity == "Medium":
+
+            action += (
+                " Schedule the fix according to the current sprint priority."
+            )
+
+        else:
+
+            action += (
+                " This defect can be handled according to normal priority."
+            )
+
+
+        return {
+            "defect_type": defect_type,
+            "possible_cause": possible_cause,
+            "recommended_solution": recommended_solution,
+            "testing": testing,
+            "action": action
+        }
+
+
+    ai_col1, ai_col2 = st.columns(2)
+
+    with ai_col1:
+
+        bug_title = st.text_input(
+            "🐞 Bug Title",
+            key="bug_title"
+        )
+
+        affected_module = st.text_input(
+            "📦 Affected Module",
+            key="affected_module"
+        )
+
+        severity = st.selectbox(
+            "🚨 Severity",
+            [
+                "Low",
+                "Medium",
+                "High",
+                "Critical"
+            ],
+            key="ai_severity"
+        )
+
+    with ai_col2:
+
+        bug_description = st.text_area(
+            "📝 Bug Description",
+            height=150,
+            key="bug_description"
+        )
+
+        priority = st.selectbox(
+            "⚡ Priority",
+            [
+                "Low",
+                "Medium",
+                "High",
+                "Critical"
+            ],
+            key="ai_priority"
+        )
+
+
+    root_cause = st.text_input(
+        "🌳 Known Root Cause (Optional)",
+        key="root_cause"
+    )
+
+
+    if st.button(
+        "🤖 Analyze Defect",
+        type="primary",
+        use_container_width=True,
+        key="analyze_defect"
+    ):
+
+        if not bug_title:
+
+            st.warning("Please enter the Bug Title.")
+
+        elif not bug_description:
+
+            st.warning("Please enter the Bug Description.")
+
+        elif not affected_module:
+
+            st.warning("Please enter the Affected Module.")
+
+        else:
+
+            result = generate_resolution(
+                bug_title,
+                bug_description,
+                affected_module,
+                severity,
+                priority,
+                root_cause
+            )
+
+            st.success("Defect analysis completed successfully.")
+
+            st.subheader("🤖 Resolution Assistance Result")
+
+            st.markdown(
+                f"### 🏷 Identified Defect Type: **{result['defect_type']}**"
+            )
+
+            result_col1, result_col2 = st.columns(2)
+
+            with result_col1:
+
+                st.markdown("### 🔍 Possible Root Cause")
+
+                st.info(result["possible_cause"])
+
+                st.markdown("### 🛠 Recommended Resolution")
+
+                st.success(result["recommended_solution"])
+
+            with result_col2:
+
+                st.markdown("### 🧪 Testing Recommendation")
+
+                st.warning(result["testing"])
+
+                st.markdown("### 📌 Recommended Action")
+
+                st.info(result["action"])
+
+
+# =========================================================
+# TAB 7 - AI ASSISTANT
+# =========================================================
+
+with tab7:
+
+    st.subheader("🤖 AI Assistant")
+
+    st.write(
+        "Ask questions about the project or any general topic such as "
+        "Artificial Intelligence, Machine Learning, Python, programming, "
+        "science, technology, and more."
+    )
+
+    user_question = st.text_input(
+        "Ask any question about the project or any general topic:",
+        key="ai_question"
+    )
+
+
+    # =====================================================
+    # ANSWER PROJECT QUESTIONS DIRECTLY FROM DATASET
+    # =====================================================
+
+    def answer_project_question(question, data):
+
+        question = question.lower().strip()
+
+
+        # TOTAL BUGS
+        if any(
+            phrase in question
+            for phrase in [
+                "how many bugs",
+                "total bugs",
+                "number of bugs",
+                "bug count",
+                "bugs in project"
+            ]
+        ):
+            return (
+                f"🐞 There are **{len(data)} bugs** "
+                f"in the project dataset."
+            )
+
+
+        # MODULE WITH HIGHEST BUGS
+        if any(
+            phrase in question
+            for phrase in [
+                "which module has highest bugs",
+                "which module has the highest bugs",
+                "which module has most bugs",
+                "module with highest bugs",
+                "module with most bugs"
+            ]
+        ):
+
+            if "Module" in data.columns:
+
+                module_counts = (
+                    data["Module"]
+                    .fillna("Unknown")
+                    .value_counts()
+                )
+
+                if not module_counts.empty:
+
+                    module_name = module_counts.index[0]
+                    bug_count = module_counts.iloc[0]
+
+                    return (
+                        f"📦 The module with the highest number of bugs is "
+                        f"**{module_name}**, with **{bug_count} bugs**."
+                    )
+
+
+        # OPEN BUGS
+        if "open bug" in question or "open bugs" in question:
+
+            if "Status" in data.columns:
+
+                count = len(
+                    data[
+                        data["Status"]
+                        .astype(str)
+                        .str.contains(
+                            "open",
+                            case=False,
+                            na=False
+                        )
+                    ]
+                )
+
+                return f"🔓 There are **{count} open bugs**."
+
+
+        # CLOSED BUGS
+        if "closed bug" in question or "closed bugs" in question:
+
+            if "Status" in data.columns:
+
+                count = len(
+                    data[
+                        data["Status"]
+                        .astype(str)
+                        .str.contains(
+                            "closed",
+                            case=False,
+                            na=False
+                        )
+                    ]
+                )
+
+                return f"✅ There are **{count} closed bugs**."
+
+
+        # CRITICAL BUGS
+        if "critical bug" in question or "critical bugs" in question:
+
+            if "Severity" in data.columns:
+
+                count = len(
+                    data[
+                        data["Severity"]
+                        .astype(str)
+                        .str.contains(
+                            "critical",
+                            case=False,
+                            na=False
+                        )
+                    ]
+                )
+
+                return f"🚨 There are **{count} critical bugs**."
+
+
+        # AVERAGE RESOLUTION TIME
+        if any(
+            phrase in question
+            for phrase in [
+                "average resolution time",
+                "average resolution",
+                "avg resolution"
+            ]
+        ):
+
+            if "Resolution_Time_Hours" in data.columns:
+
+                average = (
+                    data["Resolution_Time_Hours"]
+                    .mean()
+                )
+
+                if pd.notna(average):
+
+                    return (
+                        f"⏱ The average resolution time is "
+                        f"**{average:.2f} hours**."
+                    )
+
+
+        # TEAM WITH MOST BUGS
+        if any(
+            phrase in question
+            for phrase in [
+                "team with most bugs",
+                "team with highest bugs",
+                "which team has most bugs"
+            ]
+        ):
+
+            if "Team" in data.columns:
+
+                team_counts = (
+                    data["Team"]
+                    .fillna("Unknown")
+                    .value_counts()
+                )
+
+                if not team_counts.empty:
+
+                    team_name = team_counts.index[0]
+                    bug_count = team_counts.iloc[0]
+
+                    return (
+                        f"👥 The team with the most bugs is "
+                        f"**{team_name}**, with **{bug_count} bugs**."
+                    )
+
+
+        # MOST COMMON ROOT CAUSE
+        if any(
+            phrase in question
+            for phrase in [
+                "most common root cause",
+                "top root cause",
+                "main root cause"
+            ]
+        ):
+
+            if "Root_Cause" in data.columns:
+
+                root_counts = (
+                    data["Root_Cause"]
+                    .fillna("Unknown")
+                    .value_counts()
+                )
+
+                if not root_counts.empty:
+
+                    root_cause = root_counts.index[0]
+                    bug_count = root_counts.iloc[0]
+
+                    return (
+                        f"🌳 The most common root cause is "
+                        f"**{root_cause}**, with **{bug_count} bugs**."
+                    )
+
+
+        # Not recognized as a project statistics question
+        return None
+
+
+    # =====================================================
+    # ASK AI
+    # =====================================================
+
+    if st.button(
+        "Ask AI",
+        type="primary",
+        use_container_width=True,
+        key="ask_ai"
+    ):
+
+        if user_question.strip():
+
+            try:
+
+                # -----------------------------------------
+                # FIRST CHECK PROJECT DATA QUESTIONS
+                # -----------------------------------------
+
+                project_answer = answer_project_question(
+                    user_question,
+                    df
+                )
+
+
+                if project_answer is not None:
+
+                    st.success("Answer:")
+                    st.markdown(project_answer)
+
+
+                # -----------------------------------------
+                # GENERAL QUESTIONS -> GEMINI AI
+                # -----------------------------------------
+
+                else:
+
+                    with st.spinner("⚡ Generating answer..."):
+
+                        project_context = f"""
+You are a helpful AI Assistant.
+
+You are part of the project:
+
+Intelligent Software Defect Tracking System with Resolution Assistance.
+
+The project uses:
+- Python
+- Pandas
+- Streamlit
+- Plotly
+
+The dashboard analyzes software bugs, bug status, priority,
+severity, modules, root causes, teams, trends, and resolution time.
+
+You can answer questions about this project.
+
+You can ALSO answer completely general questions outside the project,
+including questions about:
+- Artificial Intelligence
+- Machine Learning
+- Python
+- Programming
+- Data Science
+- Software Testing
+- Science
+- Technology
+- General knowledge
+- Other reasonable topics
+
+Do not restrict your answers to the project.
+
+Answer clearly and concisely unless the user asks for
+a detailed explanation.
+
+Question:
+{user_question}
+"""
+
+
+                # Generate Gemini response
+
+                    result = client.models.generate_content(
+                        model="gemini-3.6-flash",
+                        contents=project_context
+                    )
+
+                    response = result.text
+
+                    st.success("Answer:")
+                    st.markdown(response)
+
+
+            except Exception as e:
+
+                st.error(
+                    "❌ An error occurred while connecting "
+                    "to the AI Assistant."
+                )
+
+                st.error(f"Error: {e}")
+
+
+        else:
+
+            st.warning("Please enter a question first.")
+
+
+    # =========================================================
+    # CLEAR CHAT BUTTON
+    # =========================================================
+
+    if st.button(
+        "🗑 Clear Chat",
+        use_container_width=True,
+        key="clear_ai_chat"
+    ):
+
+        st.session_state.chat_history = []
+
+        st.rerun()
 
 
 # =========================================================
@@ -700,6 +1729,7 @@ with tab5:
 st.divider()
 
 st.caption(
-    "Intelligent Software Defect Tracking System with Resolution Assistance Dashboard | "
-    "Python | Pandas | Plotly | Streamlit"
+    "🐞 Intelligent Software Defect Tracking System with Resolution Assistance | "
+    "Developed using Python, Pandas, Streamlit and Plotly"
 )
+
